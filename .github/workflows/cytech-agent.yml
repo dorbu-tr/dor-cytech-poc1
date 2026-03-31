@@ -49,6 +49,12 @@ jobs:
       - name: AI Security Review
         if: steps.changes.outputs.stage != 'skip'
         uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -59,6 +65,14 @@ jobs:
 
             STAGE: ${{ steps.changes.outputs.stage }}
             HAS_HLD: ${{ steps.changes.outputs.has_hld }}
+
+            ## PR Context (use these for gh CLI commands)
+
+            - Repository: ${{ github.repository }}
+            - PR Number: ${{ github.event.pull_request.number }}
+            - Head SHA: ${{ github.event.pull_request.head.sha }}
+
+            The `gh` CLI is available and authenticated via $GH_TOKEN.
 
             ## Your Ruleset (MANDATORY - read these files FIRST)
 
@@ -129,29 +143,74 @@ jobs:
             - **Auto-reject**: At least one auto-reject criterion is true
             - **Manual review**: No auto-reject but at least one manual-review trigger
 
-            ## Output Format
+            ## MANDATORY Output Steps (execute ALL in order)
 
-            1. Post **inline review comments** on the EXACT lines in hld.md (or plan.md)
-               where issues are found. Each inline comment must include:
-               - Severity prefix: `[BLOCK MERGE]` for auto-reject, `[NEEDS REVIEW]` for
-                 manual-review triggers, `[INFO]` for informational notes
-               - The specific rule violated (e.g., "R12 - Cluster placement mismatch")
-               - Current value vs expected value
-               - Remediation: what the developer should change
+            ### Step 1: Write verdict file
 
-            2. Post a **summary PR comment** with:
-               - Table of Section 5.1 fields with PASS/FAIL status
-               - Table of Section 5.2 criteria with PASS/FAIL status
-               - Table of Section 5.3 triggers with YES/NO status
-               - Cross-section consistency check results
-               - Final verdict: Auto-approve / Auto-reject / Manual review
-               - If Auto-reject: numbered list of violations with hld.md line references
-               - If Manual review: which triggers fired, why, and who to contact
-               - If Auto-approve: confirmation that all checks passed
+            Write EXACTLY one of these strings to `/tmp/security-verdict.txt`:
+            - `Auto-approve`
+            - `Auto-reject`
+            - `Manual review`
 
-            3. When posting inline comments, target the SPECIFIC row in the markdown
-               table where the issue is. For example, if the PII Level row in Section 5.1
-               is wrong, comment on that exact line in the diff.
+            Example:
+            ```
+            echo "Auto-reject" > /tmp/security-verdict.txt
+            ```
+
+            ### Step 2: Post summary PR comment via gh CLI
+
+            Build your full review as a markdown string and post it using `gh`:
+            ```
+            gh pr comment $PR_NUMBER --repo $REPO --body "YOUR MARKDOWN REVIEW"
+            ```
+
+            The review body MUST include:
+            - Table of Section 5.1 fields with PASS/FAIL status
+            - Table of Section 5.2 criteria with PASS/FAIL status
+            - Table of Section 5.3 triggers with YES/NO status
+            - Cross-section consistency check results
+            - Final verdict line: `## Verdict: Auto-approve` or `## Verdict: Auto-reject` or `## Verdict: Manual review`
+            - If Auto-reject: numbered list of violations with file and line references
+            - If Manual review: which triggers fired, why, and who to contact
+            - If Auto-approve: confirmation that all checks passed
+
+            Use a heredoc for the body to handle multiline markdown:
+            ```
+            gh pr comment $PR_NUMBER --repo $REPO --body "$(cat <<'COMMENT_EOF'
+            ## Cytech Security Review
+
+            ... your review tables ...
+
+            ## Verdict: Auto-reject
+
+            ... violations ...
+            COMMENT_EOF
+            )"
+            ```
+
+            ### Step 3: Post inline review comments (if issues found)
+
+            For each finding, post an inline comment on the specific line using:
+            ```
+            gh api repos/$REPO/pulls/$PR_NUMBER/comments \
+              --method POST \
+              -f body="[BLOCK MERGE] R8 — Hardcoded IP ..." \
+              -f path="specs/001-trading-positions-api/hld.md" \
+              -f commit_id="$PR_HEAD_SHA" \
+              -f line=150 \
+              -f side="RIGHT"
+            ```
+
+            Severity prefixes for inline comments:
+            - `[BLOCK MERGE]` for auto-reject criteria
+            - `[NEEDS REVIEW]` for manual-review triggers
+            - `[INFO]` for informational notes
+
+            ### IMPORTANT
+
+            - You MUST execute Steps 1, 2, and 3 using Bash. Do NOT just describe what you would do.
+            - The gh CLI is already authenticated. Use `$PR_NUMBER`, `$REPO`, and `$PR_HEAD_SHA` env vars directly.
+            - Verify the comment was posted by checking the exit code of the gh command.
 
       - name: Set commit status
         if: steps.changes.outputs.stage != 'skip'
@@ -160,32 +219,43 @@ jobs:
         run: |
           SHA="${{ github.event.pull_request.head.sha }}"
           PR_NUM="${{ github.event.pull_request.number }}"
+          VERDICT=""
 
-          ISSUE_COMMENTS=$(gh api "repos/${{ github.repository }}/issues/${PR_NUM}/comments" \
-            --jq '[.[] | select(.user.login | test("bot"; "i"))] | map(.body) | join("\n")' 2>/dev/null || echo "")
-
-          REVIEW_BODIES=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUM}/reviews" \
-            --jq '[.[] | select(.user.login | test("bot"; "i"))] | map(.body) | join("\n")' 2>/dev/null || echo "")
-
-          ALL_COMMENTS="${ISSUE_COMMENTS}
-          ${REVIEW_BODIES}"
-
-          echo "::group::Debug - bot comment detection"
-          echo "Issue comment length: ${#ISSUE_COMMENTS}"
-          echo "Review body length: ${#REVIEW_BODIES}"
-          echo "::endgroup::"
-
-          if echo "$ALL_COMMENTS" | grep -qi "Auto-approve"; then
-            STATE="success"; DESC="Security review passed - Auto-approve"
-          elif echo "$ALL_COMMENTS" | grep -qi "Auto-reject"; then
-            STATE="failure"; DESC="Security review failed - Auto-reject (see PR comments)"
-          elif echo "$ALL_COMMENTS" | grep -qi "Manual review"; then
-            STATE="pending"; DESC="Security review requires manual approval (see PR comments)"
+          if [ -f /tmp/security-verdict.txt ]; then
+            VERDICT=$(cat /tmp/security-verdict.txt | tr -d '[:space:]')
+            echo "Read verdict from file: '$VERDICT'"
           else
-            STATE="failure"; DESC="Security review failed - could not determine verdict (see PR comments)"
+            echo "No verdict file found, falling back to comment parsing"
+
+            ISSUE_COMMENTS=$(gh api "repos/${{ github.repository }}/issues/${PR_NUM}/comments" \
+              --jq '[.[] | select(.user.login | test("bot"; "i"))] | map(.body) | join("\n")' 2>/dev/null || echo "")
+
+            REVIEW_BODIES=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUM}/reviews" \
+              --jq '[.[] | select(.user.login | test("bot"; "i"))] | map(.body) | join("\n")' 2>/dev/null || echo "")
+
+            ALL_COMMENTS="${ISSUE_COMMENTS}${REVIEW_BODIES}"
+
+            if echo "$ALL_COMMENTS" | grep -qi "Auto-approve"; then
+              VERDICT="Auto-approve"
+            elif echo "$ALL_COMMENTS" | grep -qi "Auto-reject"; then
+              VERDICT="Auto-reject"
+            elif echo "$ALL_COMMENTS" | grep -qi "Manual review"; then
+              VERDICT="Manualreview"
+            fi
           fi
 
-          echo "Verdict: state=$STATE desc=$DESC"
+          case "$VERDICT" in
+            Auto-approve)
+              STATE="success"; DESC="Security review passed - Auto-approve" ;;
+            Auto-reject)
+              STATE="failure"; DESC="Security review failed - Auto-reject (see PR comments)" ;;
+            Manual*review|Manualreview)
+              STATE="pending"; DESC="Security review requires manual approval (see PR comments)" ;;
+            *)
+              STATE="failure"; DESC="Security review failed - could not determine verdict (see PR comments)" ;;
+          esac
+
+          echo "Verdict: '$VERDICT' → state=$STATE desc=$DESC"
           gh api "repos/${{ github.repository }}/statuses/$SHA" \
             -f state="$STATE" -f description="$DESC" -f context="cytech-agent"
 

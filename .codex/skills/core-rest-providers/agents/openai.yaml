@@ -1,0 +1,3 @@
+interface:
+  display_name: "REST Provider Principles"
+  short_description: "REST provider architecture principles covering resilience patter"

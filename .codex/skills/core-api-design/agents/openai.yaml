@@ -1,0 +1,3 @@
+interface:
+  display_name: "API Design Conventions"
+  short_description: "REST API design conventions including routes, versioning, pagina"

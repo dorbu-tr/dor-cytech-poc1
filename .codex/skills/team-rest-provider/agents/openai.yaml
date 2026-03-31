@@ -1,0 +1,3 @@
+interface:
+  display_name: "Trading REST Provider Patterns"
+  short_description: "Use when implementing: external API integrations, REST providers"

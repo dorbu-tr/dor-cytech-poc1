@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+		<RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="eToro.Trading.Bootstrap.Models" Version="$(TradingCoreBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Domain.Repositories" Version="$(TradingSharedBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Infrastructure.Providers" Version="$(TradingSharedBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Infrastructure.Repositories" Version="$(TradingSharedBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Sql.DbAccess" Version="$(TradingCoreBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Sql.Persistors" Version="$(TradingCoreBuildVersion)" />
+		<PackageReference Include="Microsoft.Extensions.Http" Version="8.0.0" />
+		<PackageReference Include="Polly" Version="8.5.0" />
+		<PackageReference Include="Polly.Extensions" Version="8.5.0" />
+		<PackageReference Include="Scrutor" Version="4.2.0" />
+	</ItemGroup>
+  
+	<ItemGroup>
+		<ProjectReference Include="..\dor-cytech-poc1.Domain\dor-cytech-poc1.Domain.csproj" />
+	</ItemGroup>
+
+</Project>

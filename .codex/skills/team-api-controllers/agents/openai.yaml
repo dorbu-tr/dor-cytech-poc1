@@ -1,0 +1,3 @@
+interface:
+  display_name: "Trading API Controller Patterns"
+  short_description: "Use when implementing: controllers, request/response DTOs, AppSe"

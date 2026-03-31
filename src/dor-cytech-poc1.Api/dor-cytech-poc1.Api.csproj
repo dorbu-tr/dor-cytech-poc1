@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+		<RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+		<ServerGarbageCollection>false</ServerGarbageCollection>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+		<NoWarn>$(NoWarn);1591</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="AutoMapper.Extensions.Microsoft.DependencyInjection" Version="11.0.0" />
+		<PackageReference Include="eToro.Trading.Application.HealthCheck.Extensions" Version="$(FrameworkBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Application.Providers" Version="$(TradingSharedBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Bootstrap.Extensions.Logger" Version="$(TradingCoreBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Bootstrap.HealthCheck" Version="$(TradingCoreBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Bootstrap.Models" Version="$(TradingCoreBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Configuration.Providers.Ccm" Version="$(TradingCoreBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Configuration.Providers.DbInstanceSelector" Version="$(TradingCoreBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Configuration.Providers.KeyVault" Version="$(TradingCoreBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Configuration.Providers.Scb" Version="$(TradingCoreBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Framework.Configuration" Version="$(FrameworkBuildVersion)" />
+		<PackageReference Include="etoro.Trading.Framework.Log.Extension.Json" Version="$(FrameworkBuildVersion)" />
+		<PackageReference Include="eToro.Trading.RetryHandling" Version="$(TradingCoreBuildVersion)" />
+		<PackageReference Include="FluentValidation" Version="11.3.0" />
+		<PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.3.0" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Log4Net.AspNetCore" Version="6.1.0" />
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="6.4.0" />
+		<PackageReference Include="Swashbuckle.AspNetCore.Newtonsoft" Version="6.4.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\dor-cytech-poc1.Application\dor-cytech-poc1.Application.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Content Update="appsettings.json">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </Content>
+	</ItemGroup>
+
+</Project>

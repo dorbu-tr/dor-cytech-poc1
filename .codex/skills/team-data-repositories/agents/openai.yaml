@@ -1,0 +1,3 @@
+interface:
+  display_name: "Trading Data Repository Patterns"
+  short_description: "Use when implementing: MSSQL repositories, stored procedure call"

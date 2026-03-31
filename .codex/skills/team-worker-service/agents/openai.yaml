@@ -1,0 +1,3 @@
+interface:
+  display_name: "Trading .NET Worker/Executor Development"
+  short_description: "Trading .NET Backend Worker/Executor service development pattern"

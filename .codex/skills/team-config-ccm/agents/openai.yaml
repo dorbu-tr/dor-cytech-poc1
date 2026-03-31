@@ -1,0 +1,3 @@
+interface:
+  display_name: "Trading Configuration Patterns (CCM/KeyVault/SCB)"
+  short_description: "Use when implementing: configuration classes, CCM (etcd) config,"

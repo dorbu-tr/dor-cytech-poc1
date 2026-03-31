@@ -1,0 +1,3 @@
+interface:
+  display_name: "README Generation Patterns"
+  short_description: "Generate comprehensive README.md files from actual implemented c"

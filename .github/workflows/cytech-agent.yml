@@ -1,0 +1,182 @@
+name: Cytech Security Agent
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+
+jobs:
+  security-review:
+    name: Security Review
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed files
+        id: changes
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          HAS_SPECS=$(echo "$CHANGED" | grep -c '^specs/' || true)
+          HAS_SRC=$(echo "$CHANGED" | grep -c '^src/' || true)
+          HAS_HLD=$(echo "$CHANGED" | grep -c 'hld\.md$' || true)
+
+          if [ "$HAS_HLD" -gt 0 ]; then
+            echo "has_hld=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_hld=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$HAS_SPECS" -gt 0 ] && [ "$HAS_SRC" -gt 0 ]; then
+            echo "stage=both" >> "$GITHUB_OUTPUT"
+          elif [ "$HAS_SPECS" -gt 0 ]; then
+            echo "stage=plan" >> "$GITHUB_OUTPUT"
+          elif [ "$HAS_SRC" -gt 0 ]; then
+            echo "stage=code" >> "$GITHUB_OUTPUT"
+          else
+            echo "stage=skip" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: AI Security Review
+        if: steps.changes.outputs.stage != 'skip'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_args: "--max-turns 15 --allowedTools Bash,computer"
+          prompt: |
+            You are the Cytech Security Agent for eToro services.
+            You are performing a CI RE-VALIDATION of a locally-generated HLD and plan.
+
+            STAGE: ${{ steps.changes.outputs.stage }}
+            HAS_HLD: ${{ steps.changes.outputs.has_hld }}
+
+            ## Your Ruleset (MANDATORY - read these files FIRST)
+
+            Read these files from the repository as your canonical rules:
+            1. `.cursor/skills/core/security-review/SKILL.md` -- the complete security ruleset
+            2. `.cursor/skills/core/cluster-deployment/SKILL.md` -- cluster placement rules
+
+            ## What to Review
+
+            Based on the STAGE and HAS_HLD values:
+
+            ### If HAS_HLD = true (HLD re-validation)
+
+            Find the `hld.md` file in the PR. This file was generated locally by the
+            `speckit.cytech-plan` command. Your job is to RE-VALIDATE it against the rules.
+
+            **Section 5.1 (Data Classification D1-D8)**:
+            - All `(mandatory)` fields must be filled (not placeholder text)
+            - D1+D2: If Third-Party = Yes, Due Diligence must be Yes, else auto-reject
+            - D5: PII Level must match plan.md's PII Handling declaration
+            - D6: Financial/Trading data + non-Trading cluster = flag for review
+            - Domain = wallet or pci → mandatory review meeting regardless
+            - Every Result column must be correctly evaluated (not blank)
+
+            **Section 5.2 (Security Criteria A1-A8, R1, R4, R6, R11, R12)**:
+            - Cross-reference each row's Value with the corresponding plan.md field
+            - Verify each Result is correctly derived from the Value + Rule
+            - Any R-row marked FAIL → verdict must be Auto-reject
+            - All A-rows must be PASS for Auto-approve
+            - Check for DYN- rows and verify their Evidence is substantiated
+
+            **Section 5.3 (Manual Review Triggers M1-M8)**:
+            - Verify Detected column matches plan.md declarations
+            - Any M-row with Detected=YES → verdict must be at minimum Manual review
+            - Check for DYN-M- rows and verify their Evidence
+
+            **Section 7.3 (Security Agent Decision)**:
+            - Decision must be consistent with Sections 5.2 and 5.3
+            - Reason must reference specific criteria/triggers
+
+            **Cross-section consistency**:
+            - Section 6 PII Redaction must match Section 5 PII Level
+            - Section 2 Cluster assignments must match Section 5.2 A7/R12 evaluation
+            - Section 1 Classification must match the auth model in Section 5
+
+            ### If STAGE = plan (no HLD, legacy flow)
+
+            Evaluate specs/*/plan.md against the security-review skill rules.
+            Check the Service Security Profile section for all required fields.
+            Validate cluster placement using the cluster-deployment skill decision tree.
+            Check data classification, PII handling, auth model, dependencies.
+
+            ### If STAGE = code
+
+            Evaluate src/ changes against post-commit checks in the security-review skill.
+            Check for: hardcoded secrets, PII in logs, missing auth, input validation,
+            hardcoded IPs/connection strings, sensitive data in error responses,
+            overly permissive IAM/RBAC, spec-vs-code drift.
+
+            ### If STAGE = both
+
+            Run both plan/HLD and code checks.
+
+            ## Verdict
+
+            Produce exactly ONE verdict:
+            - **Auto-approve**: ALL criteria pass, NO reject triggers, NO manual review triggers
+            - **Auto-reject**: At least one auto-reject criterion is true
+            - **Manual review**: No auto-reject but at least one manual-review trigger
+
+            ## Output Format
+
+            1. Post **inline review comments** on the EXACT lines in hld.md (or plan.md)
+               where issues are found. Each inline comment must include:
+               - Severity prefix: `[BLOCK MERGE]` for auto-reject, `[NEEDS REVIEW]` for
+                 manual-review triggers, `[INFO]` for informational notes
+               - The specific rule violated (e.g., "R12 - Cluster placement mismatch")
+               - Current value vs expected value
+               - Remediation: what the developer should change
+
+            2. Post a **summary PR comment** with:
+               - Table of Section 5.1 fields with PASS/FAIL status
+               - Table of Section 5.2 criteria with PASS/FAIL status
+               - Table of Section 5.3 triggers with YES/NO status
+               - Cross-section consistency check results
+               - Final verdict: Auto-approve / Auto-reject / Manual review
+               - If Auto-reject: numbered list of violations with hld.md line references
+               - If Manual review: which triggers fired, why, and who to contact
+               - If Auto-approve: confirmation that all checks passed
+
+            3. When posting inline comments, target the SPECIFIC row in the markdown
+               table where the issue is. For example, if the PII Level row in Section 5.1
+               is wrong, comment on that exact line in the diff.
+
+      - name: Set commit status
+        if: steps.changes.outputs.stage != 'skip'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SHA="${{ github.event.pull_request.head.sha }}"
+          PR_NUM="${{ github.event.pull_request.number }}"
+
+          COMMENTS=$(gh api "repos/${{ github.repository }}/issues/${PR_NUM}/comments" \
+            --jq '[.[] | select(.user.login == "github-actions[bot]" or .user.login == "claude[bot]")] | last | .body // ""')
+
+          if echo "$COMMENTS" | grep -qi "Auto-approve"; then
+            STATE="success"; DESC="Security review passed - Auto-approve"
+          elif echo "$COMMENTS" | grep -qi "Auto-reject"; then
+            STATE="failure"; DESC="Security review failed - Auto-reject (see PR comments)"
+          elif echo "$COMMENTS" | grep -qi "Manual review"; then
+            STATE="pending"; DESC="Security review requires manual approval (see PR comments)"
+          else
+            STATE="success"; DESC="Security review completed"
+          fi
+
+          gh api "repos/${{ github.repository }}/statuses/$SHA" \
+            -f state="$STATE" -f description="$DESC" -f context="cytech-agent"
+
+      - name: Skip notification
+        if: steps.changes.outputs.stage == 'skip'
+        run: echo "No specs/ or src/ changes detected. Skipping security review."

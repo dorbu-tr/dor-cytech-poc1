@@ -1,0 +1,388 @@
+openapi: 3.0.3
+info:
+  title: Trading Positions API
+  description: |
+    Aggregator service for managing trading positions. Proxies and enriches position
+    data from the upstream Positions API with instrument metadata from the Instruments API.
+  version: 1.0.0
+  contact:
+    name: Trading Team
+
+servers:
+  - url: http://int-dor-cytech-poc1.dev.local
+    description: Integration
+  - url: http://stg-dor-cytech-poc1.dev.local
+    description: Staging
+
+security:
+  - stsAuth: []
+
+paths:
+  /api/v1/positions:
+    get:
+      summary: List open positions
+      description: |
+        Returns a paginated list of open trading positions for the authenticated user.
+        Supports cursor-based pagination and optional filtering by instrument.
+        Positions are sorted by open date descending (newest first).
+      operationId: getPositions
+      tags:
+        - Positions
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque cursor token from a previous response for pagination.
+          schema:
+            type: string
+        - name: pageSize
+          in: query
+          required: false
+          description: Number of items per page (1–100). Defaults to 20 from configuration.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: instrumentId
+          in: query
+          required: false
+          description: Filter positions by instrument ID.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Paginated list of open positions.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetPositionsResponse'
+              example:
+                items:
+                  - positionId: 12345678
+                    instrumentId: 1001
+                    openRate: 150.25
+                    openDateTime: "2026-01-15T10:30:00Z"
+                    isBuy: true
+                    leverage: 5
+                    amount: 1000.00
+                    instrument:
+                      instrumentId: 1001
+                      typeId: 5
+                      isActive: true
+                nextCursor: "eyJvZmZzZXQiOjIwfQ=="
+                hasNext: true
+        '400':
+          description: Validation error (invalid cursor, pageSize, or instrumentId).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Missing or invalid STS authentication token.
+
+  /api/v1/positions/{positionId}:
+    get:
+      summary: Get position details
+      description: |
+        Returns full details of a specific trading position owned by the authenticated user,
+        enriched with instrument metadata. Returns 404 if the position does not exist or
+        is not owned by the requesting user.
+      operationId: getPositionById
+      tags:
+        - Positions
+      parameters:
+        - name: positionId
+          in: path
+          required: true
+          description: The unique position identifier.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '200':
+          description: Full position detail with instrument enrichment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetPositionDetailResponse'
+              example:
+                positionId: 12345678
+                instrumentId: 1001
+                openRate: 150.25
+                openDateTime: "2026-01-15T10:30:00Z"
+                isBuy: true
+                leverage: 5
+                amount: 1000.00
+                units: 6.65
+                totalFees: -2.50
+                takeProfitRate: 160.00
+                stopLossRate: 140.00
+                instrument:
+                  instrumentId: 1001
+                  typeId: 5
+                  isActive: true
+        '400':
+          description: Validation error (invalid positionId format).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Missing or invalid STS authentication token.
+        '404':
+          description: Position not found or not owned by the authenticated user.
+
+  /api/v1/positions/{positionId}/close:
+    post:
+      summary: Close a position
+      description: |
+        Closes an open trading position owned by the authenticated user.
+        Optionally accepts a close reason. Returns a tracking token for
+        async status monitoring. Returns 404 if not found/not owned,
+        409 if position is not in an open state.
+      operationId: closePosition
+      tags:
+        - Positions
+      parameters:
+        - name: positionId
+          in: path
+          required: true
+          description: The unique position identifier to close.
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClosePositionBody'
+            example:
+              closeReason: "UserRequested"
+      responses:
+        '200':
+          description: Position close initiated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClosePositionResponse'
+              example:
+                positionId: 12345678
+                trackingToken: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        '400':
+          description: Validation error (invalid positionId or closeReason).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Missing or invalid STS authentication token.
+        '404':
+          description: Position not found or not owned by the authenticated user.
+        '409':
+          description: Position is not in an open state (already closed or closing).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+components:
+  securitySchemes:
+    stsAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Raw STS authentication token (no Bearer prefix).
+
+  schemas:
+    GetPositionsResponse:
+      type: object
+      required:
+        - items
+        - hasNext
+      properties:
+        items:
+          type: array
+          description: Page of position summaries.
+          items:
+            $ref: '#/components/schemas/PositionItem'
+        nextCursor:
+          type: string
+          nullable: true
+          description: Opaque cursor for the next page. Null if this is the last page.
+        hasNext:
+          type: boolean
+          description: Whether more pages of results exist.
+
+    PositionItem:
+      type: object
+      required:
+        - positionId
+        - instrumentId
+        - openRate
+        - openDateTime
+        - isBuy
+        - leverage
+        - amount
+      properties:
+        positionId:
+          type: integer
+          format: int64
+          description: Unique position identifier.
+        instrumentId:
+          type: integer
+          description: Instrument being traded.
+        openRate:
+          type: number
+          format: decimal
+          description: Entry price when position was opened.
+        openDateTime:
+          type: string
+          format: date-time
+          description: UTC timestamp when position was opened.
+        isBuy:
+          type: boolean
+          description: True for long positions, false for short.
+        leverage:
+          type: integer
+          description: Leverage multiplier applied.
+        amount:
+          type: number
+          format: decimal
+          description: USD amount allocated to this position.
+        instrument:
+          $ref: '#/components/schemas/InstrumentInfo'
+          nullable: true
+          description: Enriched instrument data. Null if Instruments API is unavailable.
+
+    GetPositionDetailResponse:
+      type: object
+      required:
+        - positionId
+        - instrumentId
+        - openRate
+        - openDateTime
+        - isBuy
+        - leverage
+        - amount
+        - units
+        - totalFees
+      properties:
+        positionId:
+          type: integer
+          format: int64
+          description: Unique position identifier.
+        instrumentId:
+          type: integer
+          description: Instrument being traded.
+        openRate:
+          type: number
+          format: decimal
+          description: Entry price.
+        openDateTime:
+          type: string
+          format: date-time
+          description: UTC timestamp when opened.
+        isBuy:
+          type: boolean
+          description: True for long, false for short.
+        leverage:
+          type: integer
+          description: Leverage multiplier.
+        amount:
+          type: number
+          format: decimal
+          description: USD amount allocated.
+        units:
+          type: number
+          format: decimal
+          description: Number of units in the position.
+        totalFees:
+          type: number
+          format: decimal
+          description: Accumulated fees (overnight fees, dividends, etc.).
+        takeProfitRate:
+          type: number
+          format: decimal
+          nullable: true
+          description: Take-profit trigger price.
+        stopLossRate:
+          type: number
+          format: decimal
+          nullable: true
+          description: Stop-loss trigger price.
+        instrument:
+          $ref: '#/components/schemas/InstrumentInfo'
+          nullable: true
+          description: Enriched instrument data. Null if Instruments API is unavailable.
+
+    ClosePositionBody:
+      type: object
+      properties:
+        closeReason:
+          type: string
+          enum:
+            - UserRequested
+            - StopLoss
+            - TakeProfit
+            - MarginCall
+            - Other
+          description: Optional reason for closing the position.
+
+    ClosePositionResponse:
+      type: object
+      required:
+        - positionId
+        - trackingToken
+      properties:
+        positionId:
+          type: integer
+          format: int64
+          description: The closed position identifier.
+        trackingToken:
+          type: string
+          description: Upstream async tracking token for monitoring close status.
+
+    InstrumentInfo:
+      type: object
+      required:
+        - instrumentId
+        - typeId
+        - isActive
+      properties:
+        instrumentId:
+          type: integer
+          description: Instrument identifier.
+        typeId:
+          type: integer
+          description: Instrument type (e.g., stock, crypto, commodity).
+        isActive:
+          type: boolean
+          description: Whether the instrument is currently active and tradeable.
+
+    ProblemDetails:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Error type URI.
+        title:
+          type: string
+          description: Short error title.
+        status:
+          type: integer
+          description: HTTP status code.
+        detail:
+          type: string
+          description: Detailed error message.
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: Field-level validation errors.

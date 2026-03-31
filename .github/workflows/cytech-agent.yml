@@ -161,19 +161,31 @@ jobs:
           SHA="${{ github.event.pull_request.head.sha }}"
           PR_NUM="${{ github.event.pull_request.number }}"
 
-          COMMENTS=$(gh api "repos/${{ github.repository }}/issues/${PR_NUM}/comments" \
-            --jq '[.[] | select(.user.login == "github-actions[bot]" or .user.login == "claude[bot]")] | last | .body // ""')
+          ISSUE_COMMENTS=$(gh api "repos/${{ github.repository }}/issues/${PR_NUM}/comments" \
+            --jq '[.[] | select(.user.login | test("bot"; "i"))] | map(.body) | join("\n")' 2>/dev/null || echo "")
 
-          if echo "$COMMENTS" | grep -qi "Auto-approve"; then
+          REVIEW_BODIES=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUM}/reviews" \
+            --jq '[.[] | select(.user.login | test("bot"; "i"))] | map(.body) | join("\n")' 2>/dev/null || echo "")
+
+          ALL_COMMENTS="${ISSUE_COMMENTS}
+          ${REVIEW_BODIES}"
+
+          echo "::group::Debug - bot comment detection"
+          echo "Issue comment length: ${#ISSUE_COMMENTS}"
+          echo "Review body length: ${#REVIEW_BODIES}"
+          echo "::endgroup::"
+
+          if echo "$ALL_COMMENTS" | grep -qi "Auto-approve"; then
             STATE="success"; DESC="Security review passed - Auto-approve"
-          elif echo "$COMMENTS" | grep -qi "Auto-reject"; then
+          elif echo "$ALL_COMMENTS" | grep -qi "Auto-reject"; then
             STATE="failure"; DESC="Security review failed - Auto-reject (see PR comments)"
-          elif echo "$COMMENTS" | grep -qi "Manual review"; then
+          elif echo "$ALL_COMMENTS" | grep -qi "Manual review"; then
             STATE="pending"; DESC="Security review requires manual approval (see PR comments)"
           else
-            STATE="success"; DESC="Security review completed"
+            STATE="failure"; DESC="Security review failed - could not determine verdict (see PR comments)"
           fi
 
+          echo "Verdict: state=$STATE desc=$DESC"
           gh api "repos/${{ github.repository }}/statuses/$SHA" \
             -f state="$STATE" -f description="$DESC" -f context="cytech-agent"
 

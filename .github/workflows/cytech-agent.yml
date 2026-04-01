@@ -36,8 +36,8 @@ jobs:
             echo "has_hld=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if [ "$HAS_SPECS" -gt 0 ] && [ "$HAS_SRC" -gt 0 ]; then
-            echo "stage=both" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_HLD" -gt 0 ]; then
+            echo "stage=plan" >> "$GITHUB_OUTPUT"
           elif [ "$HAS_SPECS" -gt 0 ]; then
             echo "stage=plan" >> "$GITHUB_OUTPUT"
           elif [ "$HAS_SRC" -gt 0 ]; then

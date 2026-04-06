@@ -53,7 +53,7 @@ Build a Trading Positions API aggregator service that proxies and enriches posit
 - **External-Facing Endpoints**: Yes — all three endpoints are client-facing (authenticated users):
   - `GET /api/v1/positions` — returns user's position list (Internal data)
   - `GET /api/v1/positions/{positionId}` — returns position detail (Internal data)
-  - `POST /api/v1/positions/{positionId}/close` — closes a position (Internal action)
+  - `POST /api/v1/positions/{positionId}/close` — closes a position (Internal action); accepts optional free-text `reason` field (string, up to 500 chars) for audit trail
 - **PCI Scope**: No
 
 ### Security Validation Checklist
@@ -297,7 +297,7 @@ dor-cytech-poc1.Api.sln
 - [ ] `ErrorMessageConsts` in `Api/Constants/` — reusable format strings
 - [ ] `FieldsMaxLength` in `Api/Constants/` — max length constants
 - [ ] Request DTOs with binding attributes on **properties** (NOT method params)
-- [ ] Body class for ClosePositionRequest with its own validation
+- [ ] Body class for ClosePositionRequest with its own validation (includes optional free-text `reason` string field, passed directly to upstream Positions API for audit logging)
 - [ ] FluentValidation validators for all three requests
 - [ ] `PositionsController` using **single request object** per method
 - [ ] `Internalize()`/`Externalize()` extension methods

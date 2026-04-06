@@ -97,9 +97,10 @@ jobs:
             - Domain = wallet or pci → mandatory review meeting regardless
             - Every Result column must be correctly evaluated (not blank)
 
-            **Section 5.2 (Security Criteria A1-A8, R1, R4, R6, R11, R12)**:
+            **Section 5.2 (Security Criteria A1-A8, R1-R12)**:
             - Cross-reference each row's Value with the corresponding plan.md field
             - Verify each Result is correctly derived from the Value + Rule
+            - ALL R-rows (R1-R12) must be present and evaluated (not just a subset)
             - Any R-row marked FAIL → verdict must be Auto-reject
             - All A-rows must be PASS for Auto-approve
             - Check for DYN- rows and verify their Evidence is substantiated
@@ -120,17 +121,23 @@ jobs:
 
             ### If STAGE = plan (no HLD, legacy flow)
 
-            Evaluate specs/*/plan.md against the security-review skill rules.
+            Evaluate specs/*/plan.md against ALL security-review skill rules (R1-R12).
             Check the Service Security Profile section for all required fields.
             Validate cluster placement using the cluster-deployment skill decision tree.
-            Check data classification, PII handling, auth model, dependencies.
+            Scan plan text for: data classification issues, PII handling, auth model,
+            dependencies, hardcoded secrets/IPs/hostnames, permission declarations,
+            internal contradictions, and all other auto-reject criteria.
 
             ### If STAGE = code
 
-            Evaluate src/ changes against post-commit checks in the security-review skill.
-            Check for: hardcoded secrets, PII in logs, missing auth, input validation,
-            hardcoded IPs/connection strings, sensitive data in error responses,
-            overly permissive IAM/RBAC, spec-vs-code drift.
+            Evaluate src/ changes against ALL auto-reject criteria (R1-R12) from the
+            security-review skill. Every criterion is checked at both plan and code stage.
+            Check for: PII in logs without masking (R1), hardcoded secrets (R2),
+            secrets in git history (R3), missing auth (R4), spec-vs-code drift (R5),
+            data classification mismatch (R6), vulnerable dependencies (R7),
+            hardcoded IPs/hostnames/connection strings (R8), overly permissive IAM/RBAC (R9),
+            sensitive data in error responses (R10), missing input validation (R11),
+            cluster placement mismatch in deployment config (R12).
 
             ### If STAGE = both
 

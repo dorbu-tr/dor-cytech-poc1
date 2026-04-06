@@ -170,13 +170,20 @@ Mark each criterion PASS / FAIL / UNKNOWN.
 
 ### 7. Evaluate Auto-Reject Criteria
 
-Check plan-stage reject criteria (R1, R4, R6, R11, R12) from the
-security-review skill's "Auto-Reject Criteria" section:
+Check ALL auto-reject criteria (R1-R12) from the security-review skill's
+"Auto-Reject Criteria" section by scanning the plan.md / HLD text:
 
 - R1: Plan declares PII logging without masking
+- R2: Plan text contains hardcoded API keys, passwords, tokens, or connection strings
+- R3: Plan text embeds active secrets (keys, tokens, passwords)
 - R4: Plan shows sensitive endpoint without auth
+- R5: Plan contains internal contradictions vs spec.md (e.g., different cluster, different auth model)
 - R6: Data classification mismatch (accesses higher-sensitivity data than
   declared)
+- R7: Plan declares dependencies with known critical/high CVEs
+- R8: Plan text contains hardcoded IPs, hostnames, URLs with IP addresses, or connection strings
+- R9: Plan declares wildcard or overly permissive IAM/RBAC roles
+- R10: Plan describes error handling that would expose stack traces, internal paths, or PII
 - R11: Plan describes endpoints with user input but no validation mentioned
 - R12: Cluster placement mismatch (from step 5)
 
@@ -265,11 +272,12 @@ Populate all three sub-tables as defined in the security-review skill's
   PASS/FAIL/REVIEW based on rules. Fill Evidence with the specific plan.md
   content evaluated.
 
-- **5.2 Security Criteria Evaluation (A1-A8, R1, R4, R6, R11, R12)**: Fill
-  Value from plan.md. Result = the evaluation outcome from steps 6-7. Evidence
-  = the specific plan.md declaration that was checked. If additional signals
-  are discovered at runtime that don't map to predefined rows, add `DYN-` rows
-  with all columns populated.
+- **5.2 Security Criteria Evaluation (A1-A8, R1-R12)**: Fill Value from
+  plan.md. Result = the evaluation outcome from steps 6-7. Evidence = the
+  specific plan.md declaration or text pattern that was checked. ALL R-rows
+  (R1-R12) are evaluated by scanning plan text for violations. If additional
+  signals are discovered at runtime that don't map to predefined rows, add
+  `DYN-` rows with all columns populated.
 
 - **5.3 Manual Review Triggers (M1-M8)**: Set Detected = YES/NO from step 8
   evaluation. Evidence = the plan.md content that triggered it. Add `DYN-M-`

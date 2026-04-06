@@ -131,25 +131,27 @@ A service is automatically approved if **ALL** of the following are true:
 
 ## Auto-Reject Criteria
 
-A service is automatically rejected if **ANY** of the following are true:
+A service is automatically rejected if **ANY** of the following are true.
 
-| # | Criterion | What to Check |
-|---|-----------|---------------|
-| R1 | PII written in clear text to logs | Plan declares logging of PII fields without `[SensitiveData]` Mask/Hash annotations |
-| R2 | Secrets / credentials hard-coded in source code | Checked post-commit: API keys, connection strings, passwords, tokens in `.cs`, `.json`, `.config` files |
-| R3 | Secrets present in git history (active secrets) | Scan PR commits for leaked secrets that are still active |
-| R4 | Sensitive endpoint exposed without authentication | Endpoint returning private portfolio data, user financial data with no auth layer declared in plan |
-| R5 | Developer implementation deviates from approved spec/plan | Code at commit stage doesn't match the declared design in the plan (post-commit check) |
-| R6 | Data classification mismatch | Service accesses data of higher sensitivity than declared in the plan / cluster classification |
-| R7 | Known vulnerable dependencies | Service uses a library with a critical/high CVE (checked against NVD/OSV at commit time) |
-| R8 | Hardcoded internal IPs, hostnames, or connection strings | Exposes infrastructure topology in code — must be in CCM/KV |
-| R9 | Overly permissive IAM / RBAC roles | Service declares wildcard permissions (e.g., `*` on resource policies) instead of least-privilege |
-| R10 | Sensitive data returned in error messages | Stack traces, internal paths, or PII visible in API error responses |
-| R11 | Missing input validation on user-supplied data | No sanitization declared for endpoints accepting file uploads or free-text input |
-| R12 | Cluster placement mismatch | Declared cluster is less restrictive than what the `cluster-deployment` skill recommends |
+**Every criterion is checked at BOTH stages.** At plan stage the evaluator
+scans plan.md / HLD text for indicators. At post-commit the evaluator scans
+source code, config files, and git history. If a violation is detectable from
+the plan, it MUST be caught immediately — do not defer to post-commit.
 
-**Plan-stage checks** (R1, R4, R6, R11, R12): Evaluated from plan.md declarations before any code exists.
-**Post-commit checks** (R2, R3, R5, R7, R8, R9, R10): Evaluated from actual source code after implementation.
+| # | Criterion | Plan-Stage Check (plan.md / HLD text) | Post-Commit Check (source code) |
+|---|-----------|---------------------------------------|--------------------------------|
+| R1 | PII written in clear text to logs | Plan declares logging of PII fields without `[SensitiveData]` Mask/Hash annotations | Log statements in code write PII without masking |
+| R2 | Secrets / credentials hard-coded | Plan text contains API keys, passwords, tokens, or connection strings | API keys, connection strings, passwords, tokens in `.cs`, `.json`, `.config` files |
+| R3 | Secrets present in git history | Plan text embeds active secrets (keys, tokens, passwords) | Scan PR commits for leaked secrets that are still active |
+| R4 | Sensitive endpoint exposed without auth | Endpoint returning private data with no auth layer declared in plan | Endpoint implementation missing auth middleware |
+| R5 | Plan / spec internal contradictions | Plan contains self-contradictions (e.g., spec says cluster X, plan says cluster Y) | Code deviates from the approved plan/spec design |
+| R6 | Data classification mismatch | Plan accesses data of higher sensitivity than declared classification | Code accesses higher-sensitivity data than declared |
+| R7 | Known vulnerable dependencies | Plan declares dependencies with known critical/high CVEs | `.csproj` / lock files reference vulnerable packages (NVD/OSV) |
+| R8 | Hardcoded internal IPs, hostnames, or connection strings | Plan text contains hardcoded IPs, hostnames, URLs with IPs, or connection strings (must be in CCM/KV) | Source code or config files contain hardcoded IPs, hostnames, or connection strings |
+| R9 | Overly permissive IAM / RBAC roles | Plan declares wildcard permissions (`*` on resource policies) | Code/config defines overly permissive roles |
+| R10 | Sensitive data returned in error messages | Plan describes error handling that exposes stack traces, internal paths, or PII | Error responses in code expose sensitive data |
+| R11 | Missing input validation on user-supplied data | No validation declared for endpoints accepting file uploads or free-text input | Endpoints in code accept user input without sanitization |
+| R12 | Cluster placement mismatch | Declared cluster is less restrictive than `cluster-deployment` skill recommends | Deployment config cluster differs from plan's security review |
 
 ---
 
@@ -174,7 +176,9 @@ manual review. This includes but is not limited to:
 
 ## Review Stages
 
-The security review runs at two stages in the service lifecycle:
+The security review runs at two stages in the service lifecycle. **ALL
+R1-R12 criteria are evaluated at BOTH stages** — the only difference is
+the input being scanned (plan text vs source code).
 
 ### Stage 1: Planning / HLD Review
 
@@ -182,32 +186,42 @@ The security review runs at two stages in the service lifecycle:
 **Input**: plan.md, spec.md, data-model.md, contracts/ (all from `specs/` directory).
 **Who acts**: Security Agent (local command or Cytech agent GitHub Action).
 
-**What's checked**:
-- Data classification declared and consistent
-- Cluster placement matches service type (via `cluster-deployment` skill)
-- Authentication documented for all private endpoints
-- PII handling declared (or confirmed as None)
-- Sensitive dependencies listed
-- Service type qualification identified
-- No auto-reject criteria triggered from plan declarations (R1, R4, R6, R11, R12)
+**What's checked** (scan plan.md / HLD text for ALL criteria):
+- Auto-approve criteria A1-A8 evaluated from Service Security Profile declarations
+- Auto-reject criteria R1-R12 evaluated by scanning plan text:
+  - R1: Plan declares PII logging without masking
+  - R2: Plan text contains embedded secrets, API keys, passwords, or tokens
+  - R3: Plan text embeds active secrets (same as R2 at plan stage)
+  - R4: Plan shows sensitive endpoint without authentication
+  - R5: Plan contains internal contradictions (e.g., spec says one thing, plan says another)
+  - R6: Plan accesses higher-sensitivity data than declared classification
+  - R7: Plan declares dependencies with known critical/high CVEs
+  - R8: Plan text contains hardcoded IPs, hostnames, URLs with IPs, or connection strings
+  - R9: Plan declares wildcard or overly permissive IAM/RBAC roles
+  - R10: Plan describes error handling that would expose sensitive data
+  - R11: Plan shows endpoints accepting user input without validation declared
+  - R12: Declared cluster less restrictive than cluster-deployment recommendation
+- Manual review triggers M1-M8 evaluated from plan declarations
 
 ### Stage 2: Post-Commit Review
 
 **When**: After implementation, when code is pushed to GitHub.
-**Input**: Source code under `src/`, `Tests/`, config files, plus the approved plan.md.
+**Input**: Source code under `src/`, `Tests/`, config files, git history, plus the approved plan.md.
 **Who acts**: Cytech agent GitHub Action.
 
-**What's checked**:
-- Code matches spec/plan — no deviation from approved design (R5)
-- No secrets in code or git history (R2, R3)
-- No PII in log statements without annotations (R1)
-- Auth implemented as declared in plan (R4)
-- Input validation present on user-supplied data (R11)
-- No sensitive data in error responses (R10)
-- No hardcoded IPs/hostnames/connection strings (R8)
-- No vulnerable dependencies with critical/high CVEs (R7)
-- No overly permissive IAM/RBAC (R9)
-- Cluster placement in deployment config matches plan's security review (R12)
+**What's checked** (scan source code for ALL criteria):
+- R1: PII in log statements without `[SensitiveData]` masking
+- R2: Hardcoded secrets in `.cs`, `.json`, `.config` files
+- R3: Secrets leaked in git history (active secrets)
+- R4: Endpoints missing auth middleware that plan declared as authenticated
+- R5: Code deviates from approved plan/spec design
+- R6: Code accesses higher-sensitivity data than declared
+- R7: Dependencies with critical/high CVEs (NVD/OSV scan)
+- R8: Hardcoded IPs, hostnames, or connection strings in source code
+- R9: Overly permissive IAM/RBAC in code or config
+- R10: Stack traces, internal paths, or PII in error responses
+- R11: Endpoints accepting user input without sanitization
+- R12: Deployment config cluster differs from plan's security review
 
 ---
 
@@ -318,8 +332,10 @@ PII escalation levels, mandatory fields).
 | D8 | Configuration System | from plan or default CCM | PASS/FAIL | Must be declared | |
 
 **5.2 Security Criteria Evaluation** — One row per auto-approve criterion
-(A1-A8) and one row per plan-stage auto-reject criterion (R1, R4, R6, R11,
-R12). Each row maps to a specific Service Security Profile field in plan.md.
+(A1-A8) and one row per auto-reject criterion (R1-R12). ALL R-rows are
+evaluated at both plan stage (scanning plan.md text) and post-commit
+(scanning source code). Each row maps to a specific field or text pattern
+in plan.md.
 
 | # | Criterion | Source Field in plan.md | Value | Result | Consequence if FAIL | Evidence |
 |---|-----------|----------------------|-------|--------|-------------------|----------|
@@ -332,8 +348,15 @@ R12). Each row maps to a specific Service Security Profile field in plan.md.
 | A7 | Cluster placement matches service type | Target Cluster vs Q1-Q4 recommendation | | PASS/FAIL | Blocks auto-approve; less restrictive→R12 reject | |
 | A8 | Service matches qualifying type | Service Type | | PASS/FAIL | Blocks auto-approve; type=Other→manual review | |
 | R1 | PII in logs without masking | plan logging declarations | | PASS/FAIL | **Auto-reject** | |
+| R2 | Hardcoded secrets/credentials | plan text scan for API keys, passwords, tokens, connection strings | | PASS/FAIL | **Auto-reject** | |
+| R3 | Secrets embedded in plan text | plan text scan for active secrets | | PASS/FAIL | **Auto-reject** | |
 | R4 | Sensitive endpoint without auth | External-Facing Endpoints + Authentication Model | | PASS/FAIL | **Auto-reject** | |
+| R5 | Plan/spec internal contradictions | cross-reference plan.md vs spec.md declarations | | PASS/FAIL | **Auto-reject** | |
 | R6 | Data classification mismatch | Data Classification vs actual data access patterns | | PASS/FAIL | **Auto-reject** | |
+| R7 | Known vulnerable dependencies | declared dependencies vs known CVEs | | PASS/FAIL | **Auto-reject** | |
+| R8 | Hardcoded IPs/hostnames/connection strings | plan text scan for IPs, hostnames, URLs with IPs | | PASS/FAIL | **Auto-reject** | |
+| R9 | Overly permissive IAM/RBAC | plan IAM/permission declarations | | PASS/FAIL | **Auto-reject** | |
+| R10 | Sensitive data in error responses | plan error handling declarations | | PASS/FAIL | **Auto-reject** | |
 | R11 | Missing input validation | Endpoint declarations (file upload, free-text) | | PASS/FAIL | **Auto-reject** | |
 | R12 | Cluster placement mismatch | Target Cluster vs cluster-deployment recommendation | | PASS/FAIL | **Auto-reject** | |
 

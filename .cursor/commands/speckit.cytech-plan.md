@@ -66,49 +66,7 @@ Read these files:
 - **IF EXISTS**: FEATURE_DIR/data-model.md — entities and relationships
 - **IF EXISTS**: FEATURE_DIR/contracts/ — API specifications
 
-### 3. Ask Cluster Determination Questions
-
-After loading context and BEFORE extracting security signals from plan.md,
-ask the user 4 targeted questions to determine the correct cluster placement.
-These questions feed directly into the cluster-deployment skill's decision tree
-and the security-review skill's Interactive Cluster Determination section.
-
-**Ask in order**:
-
-1. **Q1**: "What is the service domain?" — Trading / Money / Other
-   - If Trading → Trading cluster, record answer, skip to step 4
-   - If Money → Money cluster, record answer, skip to step 4
-   - If Other → continue to Q2
-
-2. **Q2**: "Is this a frontend-facing service? (endpoints accessed by end-users
-   with STS tokens)" — YES / NO
-
-3. **Q3**: "Does the service have direct access to eToro DB? (SQL connection to
-   eToro production databases)" — YES / NO
-
-4. **Q4**: "Does the service have access to any other database? (non-eToro
-   databases, team-owned DBs, third-party data stores)" — YES / NO
-
-**Map answers to cluster recommendation** using the decision table from the
-security-review skill's Interactive Cluster Determination section:
-
-| Q3 (eToro DB?) | Q4 (Other DB?) | Q2 (Frontend?) | Cluster |
-|:-:|:-:|:-:|---|
-| YES | * | * | Cluster 11 (BE with eToro DB) |
-| NO | YES | * | Cluster 21 (BE) |
-| NO | NO | YES | Cluster 31 (Front) |
-| NO | NO | NO | Cluster 21 (BE) |
-
-**After determining the recommended cluster**:
-
-1. Present the recommendation to the user and ask for confirmation
-2. If plan.md already has a Target Cluster declared, compare it with the
-   recommendation:
-   - Match → proceed
-   - Mismatch → warn the user and ask if they want to update the plan
-3. Use the confirmed cluster as input for the rest of the evaluation
-
-### 4. Extract Security Signals from Plan
+### 3. Extract Security Signals from Plan
 
 Parse plan.md for the **Service Security Profile** section and extract:
 
@@ -133,32 +91,39 @@ Parse plan.md for the **Service Security Profile** section and extract:
    section (format defined in the security-review skill).
 4. Do NOT proceed with evaluation until all fields are present.
 
-### 5. Run Cluster Placement Validation
+### 4. Derive and Validate Cluster Placement
 
-Use the interactive question answers from step 3 as the **primary input** for
-cluster placement validation. The cluster-deployment skill's decision tree
-validates the recommendation, but the Q&A responses provide the evidence.
+Determine the correct cluster from the plan.md Service Security Profile
+signals. Use the cluster-deployment skill's decision rules as the validation
+authority. No interactive questions — all inputs come from plan.md and
+constitution-team.md.
 
-1. **Domain** (from Q1): Trading → Trading cluster, Money → Money cluster,
-   Other → continue.
+**Derive the recommended cluster from plan.md signals**:
+
+1. **Domain**: Read from constitution-team.md header.
+   - Trading → Trading cluster (skip remaining checks)
+   - Money → Money cluster (skip remaining checks)
+   - Other → continue
 2. **PCI/WALLET check**: If plan declares PCI Scope = Yes → escalate to Manual
    review.
-3. **eToroDB access** (from Q3): If YES → recommended cluster is 11.
-4. **Other DB access** (from Q4): If YES (and Q3=NO) → recommended cluster is 21.
-5. **Frontend-facing** (from Q2): If YES and no DB access → Cluster 31.
-   Unless plan describes massive business logic (complex orchestration, 3+ API
-   providers, rule engines, heavy transformation) → Cluster 21 (BE).
-6. **Backend** (Q2=NO, no DB): → Cluster 21 (BE).
+3. **eToroDB access**: If eToroDB Access = Yes → recommended cluster is 11
+   (BE with eToro DB).
+4. **Other DB access**: If Service Type or dependencies indicate non-eToro DB
+   access (and eToroDB Access = No) → recommended cluster is 21 (BE).
+5. **Frontend-facing**: If Authentication Model = STS client-facing AND no DB
+   access → Cluster 31 (Front). Unless plan describes massive business logic
+   (complex orchestration, 3+ API providers, rule engines, heavy
+   transformation) → Cluster 21 (BE).
+6. **Backend**: If none of the above → Cluster 21 (BE).
 
-**Compare** the confirmed cluster (from step 3) against the plan's declared
-Target Cluster:
+**Compare** the derived recommendation against the plan's declared Target
+Cluster:
 - Match → PASS
 - Declared cluster is MORE restrictive than needed → PASS (conservative is OK)
 - Declared cluster is LESS restrictive than needed → Auto-Reject (R12)
-- Conflicting or ambiguous signals (equivalent to cluster-deployment Step 3b) →
-  escalate entire verdict to Manual Review
+- Conflicting or ambiguous signals → escalate entire verdict to Manual Review
 
-### 6. Evaluate Auto-Approve Criteria
+### 5. Evaluate Auto-Approve Criteria
 
 Check every criterion from the security-review skill's "Auto-Approve Criteria"
 section against the extracted signals. ALL must pass:
@@ -169,26 +134,33 @@ section against the extracted signals. ALL must pass:
 4. No sensitive dependencies
 5. Authentication present on private endpoints
 6. Logging discipline confirmed (no PII/secrets in logs)
-7. Cluster placement matches (from step 5)
+7. Cluster placement matches (from step 4)
 8. Service matches a qualifying type
 
 Mark each criterion PASS / FAIL / UNKNOWN.
 
-### 7. Evaluate Auto-Reject Criteria
+### 6. Evaluate Auto-Reject Criteria
 
-Check plan-stage reject criteria (R1, R4, R6, R11, R12) from the
-security-review skill's "Auto-Reject Criteria" section:
+Check ALL auto-reject criteria (R1-R12) from the security-review skill's
+"Auto-Reject Criteria" section by scanning the plan.md / HLD text:
 
 - R1: Plan declares PII logging without masking
+- R2: Plan text contains hardcoded API keys, passwords, tokens, or connection strings
+- R3: Plan text embeds active secrets (keys, tokens, passwords)
 - R4: Plan shows sensitive endpoint without auth
+- R5: Plan contains internal contradictions vs spec.md (e.g., different cluster, different auth model)
 - R6: Data classification mismatch (accesses higher-sensitivity data than
   declared)
+- R7: Plan declares dependencies with known critical/high CVEs
+- R8: Plan text contains hardcoded IPs, hostnames, URLs with IP addresses, or connection strings
+- R9: Plan declares wildcard or overly permissive IAM/RBAC roles
+- R10: Plan describes error handling that would expose stack traces, internal paths, or PII
 - R11: Plan describes endpoints with user input but no validation mentioned
-- R12: Cluster placement mismatch (from step 5)
+- R12: Cluster placement mismatch (from step 4)
 
 If ANY trigger → verdict is **Auto-reject**.
 
-### 8. Evaluate Manual Review Triggers
+### 7. Evaluate Manual Review Triggers
 
 If no auto-reject criteria triggered, check manual review triggers from the
 security-review skill:
@@ -199,11 +171,11 @@ security-review skill:
 - Trading or Money cluster
 - Ambiguous external-facing endpoints
 - Confidential or Restricted data classification
-- Cluster-deployment conflict (from step 5)
+- Cluster-deployment conflict (from step 4)
 
 If ANY trigger → verdict is **Manual review**.
 
-### 9. Classify Verdict
+### 8. Classify Verdict
 
 Apply this precedence:
 
@@ -211,13 +183,14 @@ Apply this precedence:
 2. If any Manual Review trigger fired → **Manual review**
 3. If all Auto-Approve criteria passed → **Auto-approve**
 
-### 10. Generate security-review.md
+### 9. Generate security-review.md
 
 Create `FEATURE_DIR/security-review.md` following the verdict output format
 defined in the security-review skill. Include:
 
-- **Cluster Determination** subsection showing each question (Q1-Q4), the
-  user's answer, and the resulting cluster recommendation
+- **Cluster Determination** subsection showing the plan.md signals used
+  (domain, eToroDB access, authentication model, service type), the derived
+  cluster recommendation, and the comparison with the declared Target Cluster
 - Service Security Profile summary table with PASS/FAIL per attribute
 - Full criteria evaluation table with result and evidence for each criterion
 - Verdict heading: `## Verdict: Auto-approve` or `## Verdict: Auto-reject` or
@@ -227,19 +200,19 @@ defined in the security-review skill. Include:
 - If Manual review: `## Manual Review Items` with numbered list of triggers,
   evidence, and who to contact
 
-### 11. Generate CyTech HLD
+### 10. Generate CyTech HLD
 
 After producing the security-review.md verdict, generate a CyTech HLD file at
 `FEATURE_DIR/hld.md` using the template at `.specify/templates/cytech-hld-template.md`.
 
-Populate ALL sections from plan.md, cluster decision, and security evaluation:
+Populate ALL sections from plan.md and security-review.md:
 
-#### Section Mapping (plan.md → HLD)
+#### Section Mapping (plan.md + security-review.md → HLD)
 
 **Service Metadata** (from plan.md header + constitution):
 - Service Name → from plan.md branch/feature name
 - Service Repository → from git remote or constitution
-- Domain → from Q1 answer or team constitution
+- Domain → from constitution-team.md or plan.md
 - Owner (R&D team) → from constitution-team.md header
 - Author → from git config or ask user
 - Target Environments → default `QA, INT, STG, PROD` unless plan says otherwise
@@ -257,8 +230,8 @@ Populate ALL sections from plan.md, cluster decision, and security evaluation:
 **Section 2 - Deployment**:
 - Health Endpoint → `/healthcheck` (from template default)
 - HA Required → `Yes` for PROD, `No` for QA
-- Cluster Assignments → from cluster-deployment Q1-Q4 answers:
-  - PROD cluster → the confirmed cluster from security review
+- Cluster Assignments → from the cluster validation in step 4:
+  - PROD cluster → the derived/validated cluster from security-review.md
   - Other envs → auto-resolve or same cluster
 
 **Section 5 - Security** (three sub-tables from security-review skill):
@@ -271,18 +244,19 @@ Populate all three sub-tables as defined in the security-review skill's
   PASS/FAIL/REVIEW based on rules. Fill Evidence with the specific plan.md
   content evaluated.
 
-- **5.2 Security Criteria Evaluation (A1-A8, R1, R4, R6, R11, R12)**: Fill
-  Value from plan.md. Result = the evaluation outcome from steps 6-7. Evidence
-  = the specific plan.md declaration that was checked. If additional signals
-  are discovered at runtime that don't map to predefined rows, add `DYN-` rows
-  with all columns populated.
+- **5.2 Security Criteria Evaluation (A1-A8, R1-R12)**: Fill Value from
+  plan.md. Result = the evaluation outcome from steps 5-6. Evidence = the
+  specific plan.md declaration or text pattern that was checked. ALL R-rows
+  (R1-R12) are evaluated by scanning plan text for violations. If additional
+  signals are discovered at runtime that don't map to predefined rows, add
+  `DYN-` rows with all columns populated.
 
-- **5.3 Manual Review Triggers (M1-M8)**: Set Detected = YES/NO from step 8
+- **5.3 Manual Review Triggers (M1-M8)**: Set Detected = YES/NO from step 7
   evaluation. Evidence = the plan.md content that triggered it. Add `DYN-M-`
   rows for runtime-discovered triggers.
 
 **Section 7.3 - Security Agent Decision Override**:
-- Decision → the verdict from step 9 (Auto-approve / Auto-reject / Manual review)
+- Decision → the verdict from step 8 (Auto-approve / Auto-reject / Manual review)
 - Reason → summary from security-review.md evaluation
 - Reviewer → if Manual review, specify security architect contact
 
@@ -291,7 +265,7 @@ Populate all three sub-tables as defined in the security-review skill's
 - Mark as `<TBD - to be filled during implementation>` where plan has no info
 - Section 6 Monitoring: PII Redaction must match Section 5 PII Level
 
-### 12. Gate Behavior
+### 11. Gate Behavior
 
 - **Auto-approve**: Display the verdict, then present the handoff buttons
   (Create Tasks / Security Checklist). The developer can proceed.
@@ -303,7 +277,7 @@ Populate all three sub-tables as defined in the security-review skill's
   before proceeding. Ask: "Has the security architect approved? (yes/no)".
   Only present handoff buttons after confirmation.
 
-### 13. Shadow Mode
+### 12. Shadow Mode
 
 Check if the project is in shadow mode (Phase 1 rollout). In shadow mode:
 
@@ -324,5 +298,5 @@ constitution or plan.md. Default is shadow mode if no key is found.
 - Never duplicate cluster-deployment rules — reference the skill
 - Auto-reject takes precedence over Manual review
 - All evaluation at this stage is from plan.md — no code scanning
-- The HLD file (hld.md) MUST be generated after the verdict — it captures the
-  complete evaluation results for CI re-validation
+- The HLD file (hld.md) MUST be generated after the security-review.md — it
+  captures the complete evaluation results for CI re-validation

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+		<RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="eToro.Trading.Domain.Repositories" Version="$(TradingSharedBuildVersion)" />
+		<PackageReference Include="eToro.Trading.Utils" Version="$(FrameworkBuildVersion)" />
+		<PackageReference Include="FluentValidation" Version="11.3.0" />
+	</ItemGroup>
+
+</Project>

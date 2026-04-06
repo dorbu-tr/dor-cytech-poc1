@@ -1,0 +1,6 @@
+{
+    "dockerfile_entry_point": "dor-cytech-poc1.Api.dll",
+    "project_path": "src/dor-cytech-poc1.Api/dor-cytech-poc1.Api.csproj",
+    "unittests_project_path": "Tests/dor-cytech-poc1.Tests.Component/",
+    "healthcheck_path": "/api/healthcheck"
+}

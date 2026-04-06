@@ -1,0 +1,29 @@
+# dor-cytech-poc1 Development Guidelines
+
+Auto-generated from all feature plans. Last updated: 2026-03-31
+
+## Active Technologies
+
+- C# / .NET 8.0 + Trading NuGets (trading-core, trading-shared, trading-framework), Polly v8, FluentValidation 11.x, AutoMapper 12.x, Swashbuckle 6.x (001-trading-positions-api)
+
+## Project Structure
+
+```text
+src/
+tests/
+```
+
+## Commands
+
+# Add commands for C# / .NET 8.0
+
+## Code Style
+
+C# / .NET 8.0: Follow standard conventions
+
+## Recent Changes
+
+- 001-trading-positions-api: Added C# / .NET 8.0 + Trading NuGets (trading-core, trading-shared, trading-framework), Polly v8, FluentValidation 11.x, AutoMapper 12.x, Swashbuckle 6.x
+
+<!-- MANUAL ADDITIONS START -->
+<!-- MANUAL ADDITIONS END -->

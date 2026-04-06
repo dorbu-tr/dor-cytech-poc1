@@ -1,0 +1,3 @@
+interface:
+  display_name: "System Testing Patterns"
+  short_description: "System test architecture patterns for writing real HTTP tests ag"

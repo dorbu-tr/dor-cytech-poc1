@@ -1,0 +1,18 @@
+<!-- AUTO-GENERATED from .cursor/ canonical source. Do not edit directly. -->
+<!-- Source: .cursor/rules/test-developer.mdc | Regenerate: .specify/scripts/sh/sync-ai-rules.sh codex -->
+---
+description: "Tests: component tests, system tests, bootstrapper, auth mocking, infrastructure mocking"
+globs: ["**/Tests.**/**"]
+alwaysApply: false
+---
+<!-- CUSTOMIZE: Update team agent/skill paths to match your team's library implementations -->
+
+# Test Developer Context
+
+You are editing **tests** for a .NET API service.
+
+**Read the agent context (both files)**:
+1. `.codex/agents/core-test-developer` (DO NOT MODIFY — architecture standards)
+2. `.codex/agents/team-test-developer` (CUSTOMIZE — library-specific patterns)
+
+**Quick constraints**: NUnit + Shouldly only, `TestsBase : ComponentTestBase<Startup>`, `GetServiceMock<T>()`, `.Reset()`, system tests write-only (never run locally), `dotnet test --filter "Category=ComponentTests"`. Follow auth header and test provider patterns from team agent.

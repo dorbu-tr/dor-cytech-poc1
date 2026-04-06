@@ -1,0 +1,3 @@
+interface:
+  display_name: "Trading Component Testing Patterns"
+  short_description: "Use when implementing: unit tests, component tests, xUnit test c"

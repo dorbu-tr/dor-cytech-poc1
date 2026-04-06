@@ -1,0 +1,3 @@
+interface:
+  display_name: "Trading Monitoring & Logging Patterns"
+  short_description: "Use when implementing: logging, structured logging, Framework.Lo"

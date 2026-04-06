@@ -1,0 +1,3 @@
+interface:
+  display_name: "Component Testing Patterns"
+  short_description: "Component test architecture patterns using mocked external provi"

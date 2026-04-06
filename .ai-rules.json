@@ -1,0 +1,27 @@
+{
+  "canonical": ".cursor",
+  "targets": {
+    "claude-code": {
+      "enabled": true,
+      "generateContextFile": true,
+      "generateCommands": true,
+      "contextFile": "CLAUDE.md"
+    },
+    "codex": {
+      "enabled": true,
+      "generateCommands": true,
+      "contextFile": "AGENTS.md"
+    },
+    "copilot": {
+      "enabled": true,
+      "generateInstructions": true,
+      "generateAgents": true,
+      "generateSkills": true
+    }
+  },
+  "project": {
+    "name": "dor-cytech-poc1",
+    "description": "Clean Architecture .NET API service built with the eToro SDD template.",
+    "techStack": ".NET 8, C#, Clean Architecture, NUnit, Shouldly"
+  }
+}
